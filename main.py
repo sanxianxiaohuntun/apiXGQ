@@ -7,7 +7,7 @@ from datetime import datetime
 import traceback
 
 # 注册插件
-@register(name="API一键修改", description="一键修改API配置", version="0.1", author="Assistant")
+@register(name="API一键修改", description="一键修改API配置", version="0.1", author="小馄饨")
 class KeyConfigPlugin(BasePlugin):
 
     def __init__(self, host: APIHost):
