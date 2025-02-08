@@ -14,7 +14,6 @@ class KeyConfigPlugin(BasePlugin):
 
     def __init__(self, host: APIHost):
         self.config_path = "data/config/provider.json"
-        self.llm_models_source = "plugins/key/llm-models.json"
         self.llm_models_target = "data/metadata/llm-models.json"
         self.user_states = {}  
         self.host = host
@@ -184,23 +183,6 @@ class KeyConfigPlugin(BasePlugin):
                     # 发送成功消息并清理状态
                     ctx.add_return("reply", ["\n".join(success_msg)])
                     del self.user_states[sender_id]
-                    
-                    # 创建一个异步任务来处理热重载
-                    async def do_reload():
-                        await asyncio.sleep(2)
-                        try:
-                            await self.ap.reload(scope='provider')
-                            await self.ap.reload(scope='plugin')
-                            await self.ap.reload(scope='platform')
-                        except Exception as e:
-                            error_msg = [
-                                f"\n⚠ 重载过程出现错误: {str(e)}",
-                                "请尝试重启程序"
-                            ]
-                            ctx.add_return("reply", ["\n".join(error_msg)])
-                    
-                    # 启动异步重载任务
-                    asyncio.create_task(do_reload())
 
                 except Exception as e:
                     error_msg = [
@@ -259,58 +241,88 @@ class KeyConfigPlugin(BasePlugin):
 
                     # 4. 更新 llm-models.json
                     model_exists = False
-                    if os.path.exists(self.llm_models_source):
-                        with open(self.llm_models_source, 'r', encoding='utf-8') as f:
-                            llm_models = json.load(f)
+                    new_model = {
+                        "model_name": current_state['model_name'],
+                        "name": f"OneAPI/{current_state['model_name']}",
+                        "tool_call_supported": True,
+                        "vision_supported": True
+                    }
+
+                    # 确保目标目录存在
+                    os.makedirs(os.path.dirname(self.llm_models_target), exist_ok=True)
+
+                    try:
+                        # 读取现有的模型列表
+                        target_models = {"list": []}
+                        if os.path.exists(self.llm_models_target):
+                            try:
+                                with open(self.llm_models_target, 'r', encoding='utf-8') as f:
+                                    content = f.read()
+                                    if content.strip():
+                                        target_models = json.loads(content)
+                                    if 'list' not in target_models:
+                                        target_models = {"list": []}
+                            except json.JSONDecodeError:
+                                target_models = {"list": []}
                         
-                        for model in llm_models['list']:
-                            if model.get('model_name') == current_state['model_name'] or model.get('name') == f"OneAPI/{current_state['model_name']}":
-                                model_exists = True
-                                break
+                        # 分离 OneAPI 和非 OneAPI 模型
+                        model_list = target_models.get('list', [])
+                        oneapi_models = [model for model in model_list if model.get('name', '').startswith('OneAPI/')]
+                        other_models = [model for model in model_list if not model.get('name', '').startswith('OneAPI/')]
+                        
+                        # 检查新模型是否已存在于 OneAPI 模型中
+                        model_exists = any(model.get('name') == f"OneAPI/{current_state['model_name']}" for model in oneapi_models)
                         
                         if not model_exists:
-                            new_model = {
-                                "model_name": current_state['model_name'],
-                                "name": f"OneAPI/{current_state['model_name']}",
-                                "tool_call_supported": True,
-                                "vision_supported": True
-                            }
-                            llm_models['list'].append(new_model)
-                            
-                            with open(self.llm_models_source, 'w', encoding='utf-8') as f:
-                                json.dump(llm_models, f, indent=4, ensure_ascii=False)
-                                f.flush()
-                                try:
-                                    os.fsync(f.fileno())
-                                except Exception:
-                                    pass
+                            # 将新的 OneAPI 模型添加到 OneAPI 模型列表开头
+                            oneapi_models.insert(0, new_model)
+                            # 合并 OneAPI 模型和其他模型
+                            target_models['list'] = oneapi_models + other_models
 
-                        # 复制到目标位置
-                        shutil.copy2(self.llm_models_source, self.llm_models_target)
+                            # 写入更新后的配置
+                            temp_file = f"{self.llm_models_target}.temp"
+                            try:
+                                with open(temp_file, 'w', encoding='utf-8') as f:
+                                    json.dump(target_models, f, indent=4, ensure_ascii=False)
+                                    f.flush()
+                                    os.fsync(f.fileno())
+                                
+                                if os.path.exists(self.llm_models_target):
+                                    os.remove(self.llm_models_target)
+                                os.rename(temp_file, self.llm_models_target)
+                            except Exception as e:
+                                if os.path.exists(temp_file):
+                                    os.remove(temp_file)
+                                raise Exception(f"写入llm-models.json失败: {str(e)}")
+
+                    except Exception as e:
+                        error_details = f"更新llm-models.json失败: {str(e)}\n"
+                        error_details += f"目标文件: {self.llm_models_target}\n"
+                        error_details += f"新模型: {json.dumps(new_model, ensure_ascii=False)}\n"
+                        error_details += f"堆栈跟踪:\n{traceback.format_exc()}"
+                        raise Exception(error_details)
 
                     # 5. 准备成功消息
                     success_msg = ["配置已更新成功！"]
                     if current_state['step'] == 4:  # 仅修改模型的消息
-                        if os.path.exists(self.llm_models_source):
-                            success_msg.extend([
-                                f"1. 默认模型已更新为: OneAPI/{current_state['model_name']}",
-                                "2. llm-models.json已更新" + (" (已添加新模型)" if not model_exists else "")
-                            ])
-                            if provider_backup:
-                                success_msg.append(f"3. provider.json已备份为: {os.path.basename(provider_backup)}")
-                            if llm_models_backup:
-                                success_msg.append(f"4. llm-models.json已备份为: {os.path.basename(llm_models_backup)}")
+                        success_msg.extend([
+                            f"1. 默认模型已更新为: OneAPI/{current_state['model_name']}",
+                            "2. llm-models.json已更新" + (" (已添加新模型)" if not model_exists else "")
+                        ])
+                        if provider_backup:
+                            success_msg.append(f"3. provider.json已备份为: {os.path.basename(provider_backup)}")
+                        if llm_models_backup:
+                            success_msg.append(f"4. llm-models.json已备份为: {os.path.basename(llm_models_backup)}")
                     else:  # 完整配置的消息
-                        if os.path.exists(self.llm_models_source):
-                            success_msg.extend([
-                                "1. API Key已设置",
-                                f"2. 默认模型已更新为: OneAPI/{current_state['model_name']}",
-                                "3. llm-models.json已更新" + (" (已添加新模型)" if not model_exists else "")
-                            ])
-                            if provider_backup:
-                                success_msg.append(f"4. provider.json已备份为: {os.path.basename(provider_backup)}")
-                            if llm_models_backup:
-                                success_msg.append(f"5. llm-models.json已备份为: {os.path.basename(llm_models_backup)}")
+                        success_msg.extend([
+                            "1. API Key已设置",
+                            f"2. 默认模型已更新为: OneAPI/{current_state['model_name']}",
+                            "3. llm-models.json已更新" + (" (已添加新模型)" if not model_exists else "")
+                        ])
+                        if provider_backup:
+                            success_msg.append(f"4. provider.json已备份为: {os.path.basename(provider_backup)}")
+                        if llm_models_backup:
+                            success_msg.append(f"5. llm-models.json已备份为: {os.path.basename(llm_models_backup)}")
 
                     success_msg.append("\n请按以下步骤操作：")
                     success_msg.append("1. 关闭当前运行的langbot")
@@ -320,25 +332,6 @@ class KeyConfigPlugin(BasePlugin):
                     # 6. 发送成功消息并清理状态
                     ctx.add_return("reply", ["\n".join(success_msg)])
                     del self.user_states[sender_id]
-                    
-                    # 7. 创建一个异步任务来处理热重载
-                    async def do_reload():
-                        # 等待2秒确保消息发送完成
-                        await asyncio.sleep(2)
-                        try:
-                            await self.ap.reload(scope='provider')
-                            await self.ap.reload(scope='plugin')
-                            await self.ap.reload(scope='platform')
-                        except Exception as e:
-                            # 如果重载失败，发送额外的错误消息
-                            error_msg = [
-                                f"\n⚠ 重载过程出现错误: {str(e)}",
-                                "请尝试重启程序"
-                            ]
-                            ctx.add_return("reply", ["\n".join(error_msg)])
-                    
-                    # 8. 启动异步重载任务
-                    asyncio.create_task(do_reload())
 
                 except Exception as e:
                     error_msg = [
