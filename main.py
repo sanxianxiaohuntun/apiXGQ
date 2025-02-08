@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime
 import traceback
 from pkg.core import entities as core_entities
-import asyncio  
+import asyncio
 
 # 注册插件
 @register(name="Api和模型一键修改", description="一键修改API和模型", version="0.1", author="小馄饨")
@@ -40,7 +40,7 @@ class KeyConfigPlugin(BasePlugin):
         
         if msg == "/模型配置":
             help_msg = [
-                "欢迎使用启航AI配置助手，请选择操作：",
+                "欢迎使用langbot配置助手，请选择操作：",
                 "1. 初始配置（配置API URL、API Key和模型）",
                 "2. 修改API URL",
                 "3. 修改模型",
