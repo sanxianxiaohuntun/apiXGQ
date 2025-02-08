@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime
 import traceback
 from pkg.core import entities as core_entities
-import asyncio  # 添加 asyncio 导入
+import asyncio  
 
 # 注册插件
 @register(name="Api和模型一键修改", description="一键修改API和模型", version="0.1", author="小馄饨")
