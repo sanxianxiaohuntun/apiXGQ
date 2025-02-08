@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime
 import traceback
 from pkg.core import entities as core_entities
-import asyncio
+import asyncio  
 
 # 注册插件
 @register(name="Api和模型一键修改", description="一键修改API和模型", version="0.1", author="小馄饨")
@@ -38,7 +38,7 @@ class KeyConfigPlugin(BasePlugin):
         msg = ctx.event.text_message
         sender_id = ctx.event.sender_id
         
-        if msg == "/模型配置":
+        if msg == ".模型配置":
             help_msg = [
                 "欢迎使用langbot配置助手，请选择操作：",
                 "1. 初始配置（配置API URL、API Key和模型）",
@@ -56,7 +56,7 @@ class KeyConfigPlugin(BasePlugin):
             ctx.prevent_default()
             return
 
-        if msg == "/重载插件":
+        if msg == ".重载插件":
             try:
                 await self.ap.reload(scope='plugin')
                 ctx.add_return("reply", ["插件已重新加载"])
@@ -65,7 +65,7 @@ class KeyConfigPlugin(BasePlugin):
             ctx.prevent_default()
             return
 
-        if msg == "/重载平台":
+        if msg == ".重载平台":
             try:
                 await self.ap.reload(scope='platform')
                 ctx.add_return("reply", ["消息平台已重新加载"])
@@ -74,7 +74,7 @@ class KeyConfigPlugin(BasePlugin):
             ctx.prevent_default()
             return
 
-        if msg == "/重载LLM":
+        if msg == ".重载LLM":
             try:
                 await self.ap.reload(scope='provider')
                 ctx.add_return("reply", ["LLM管理器已重新加载"])
@@ -357,7 +357,7 @@ class KeyConfigPlugin(BasePlugin):
     @handler(GroupNormalMessageReceived)
     async def group_normal_message_received(self, ctx: EventContext):
         msg = ctx.event.text_message
-        if msg.startswith("/一键修改") or msg.startswith("sk-"):
+        if msg.startswith(".模型配置") or msg.startswith("sk-"):
             ctx.add_return("reply", ["为了保护您的API key安全，请私聊机器人进行配置修改。"])
             ctx.prevent_default()
 
