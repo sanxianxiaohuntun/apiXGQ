@@ -50,4 +50,7 @@
 ```
 !model
 ```
+
+![2c8c5b4368ef034b1081d058cb31436f](https://github.com/user-attachments/assets/9792200c-bcf1-454d-bca4-544e8bbe5643)
+
 <!-- 插件开发者自行填写插件使用说明 -->
